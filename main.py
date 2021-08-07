@@ -1,12 +1,18 @@
+from selenium import webdriver
 from selenium.webdriver import Chrome
+from selenium.webdriver.chrome import options
 from selenium.webdriver.common.keys import Keys
 import pandas as pd
 
-driver = Chrome()
+# Disable geolocation
+from selenium.webdriver.chrome.options import Options
+options = webdriver.ChromeOptions()
+prefs = {"profile.default_content_setting_values.geolocation" :2}
+options.add_experimental_option("prefs",prefs)
+driver = webdriver.Chrome(options=options)
 
 driver.get("https://ocs.ca/pages/store-locator")
 print(driver.current_url)
-driver.maximize_window()
 
 # To go back, use driver.back()
 # To go forward, use driver.forward()
@@ -20,16 +26,20 @@ def agewall_bypass():
 
 agewall_bypass()
 
-# Click "See all stores" button
-see_all_stores_link = driver.find_element_by_xpath("//*[contains(text(), 'See all stores')]")
-see_all_stores_link.click()
-
-store_details_links = driver.find_elements_by_class_name('store-location-tile__more-details__store-details')
+store_pin_links = driver.find_elements_by_xpath('//*[@id="main"]/div[3]/div/div/div[1]/div[2]/div/div/div/div[1]/div[3]/div/div[3]/div')
 
 store_data = []
 
-for store_details_link in store_details_links:
-    store_details_link.click()
+for store_pin_link in store_pin_links:
+    driver.execute_script('arguments[0].click();', store_pin_link)
+
+    # Prevent "coming soon" shops from stopping the program
+    try:
+        store_details_link = driver.find_element_by_class_name('store-location-tile__more-details__store-details')
+        driver.execute_script('arguments[0].click();', store_details_link)
+    except Exception:
+        continue
+
     store_details = driver.find_element_by_class_name('store-details')
     
     store_details_header = store_details.find_element_by_class_name('store-details__header')
@@ -37,15 +47,20 @@ for store_details_link in store_details_links:
 
     store_details_info = store_details.find_element_by_class_name('store-details__info__contact__connect')
 
-    phone_number = store_details_info.find_element_by_xpath('.//a[1]').text
-    email = store_details_info.find_element_by_xpath('.//p[1]/a[1]').text
+    try:
+        phone_number = store_details_info.find_element_by_xpath('.//a[1]').text
+        assert phone_number.replace('-', '').isdigit()
+    except Exception:
+        phone_number = 'none specified'
 
-    if not '@' in email:
-        email = 'none'
-    if not phone_number.replace('-', '').isdigit():
-        phone_number = 'none'
+    try:
+        email = store_details_info.find_element_by_xpath('.//p[1]/a[1]').text
+        assert '@' in email
+    except Exception:
+        email = 'none specified'
 
     store_data.append({'name': store_name, 'email': email.lower(), 'phone_number': phone_number})
+    print(store_name, email, phone_number)
     driver.execute_script('$("#modal_bye.modal__dismiss")[1].click()')
 
 store_dataframe = pd.DataFrame(store_data)
